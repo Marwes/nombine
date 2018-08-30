@@ -5,22 +5,37 @@ pub extern crate combine;
 #[cfg_attr(test, macro_use)]
 pub extern crate nom;
 
-use combine::error::{Consumed, ParseError, StreamError};
+use combine::error::{Consumed, ParseError, StreamError, Tracked};
 use combine::stream::{FullRangeStream, Range, StreamErrorFor};
 use combine::{Parser, Stream};
 
-fn from_nom_context<I, E>(
-    input: &I,
-    context: nom::Context<I, E>,
-    mut convert_error: impl FnMut(nom::ErrorKind<E>) -> StreamErrorFor<I>,
-) -> I::Error
+fn position<I>(input: &mut I, range: I::Range) -> I::Position
 where
-    I: Stream,
+    I: FullRangeStream,
+    I::Range: Range,
 {
-    let _ = input;
-    match context {
+    let distance = input.range().len() - range.len();
+    let checkpoint = input.checkpoint();
+    let _ = input.uncons_range(distance);
+    let position = input.position();
+    input.reset(checkpoint);
+    position
+}
+
+fn from_nom_context<I, E>(
+    input: &mut I,
+    context: nom::Context<I::Range, E>,
+    mut convert_error: impl FnMut(nom::ErrorKind<E>) -> StreamErrorFor<I>,
+) -> Consumed<Tracked<I::Error>>
+where
+    I: FullRangeStream,
+    I::Range: Range,
+{
+    let error_position;
+    let error = match context {
         nom::Context::Code(error_input, err) => {
-            I::Error::from_error(error_input.position(), convert_error(err))
+            error_position = position(input, error_input);
+            I::Error::from_error(error_position.clone(), convert_error(err))
         }
 
         #[cfg(feature = "verbose-errors")]
@@ -47,8 +62,14 @@ where
                     }
                 }
             }
+            error_position = furthest_error_position;
             err
         }
+    };
+    if error_position == input.position() {
+        Consumed::Empty(error.into())
+    } else {
+        Consumed::Consumed(error.into())
     }
 }
 
@@ -79,10 +100,10 @@ pub type NomParser<I, O, E> = fn(I) -> Result<(I, O), nom::Err<I, E>>;
 ///
 /// ```
 pub fn from_nom<I, O, E>(
-    parse: NomParser<I, O, E>,
+    parse: NomParser<I::Range, O, E>,
 ) -> impl Parser<Input = I, Output = O, PartialState = ()>
 where
-    I: FullRangeStream + Clone,
+    I: FullRangeStream,
     I::Range: Range,
 {
     convert_from_nom(parse, |err| {
@@ -94,39 +115,42 @@ where
 ///
 /// Like `from_nom` but accepts a function to convert the `nom` error to `combine`.
 pub fn convert_from_nom<I, O, E>(
-    parse: NomParser<I, O, E>,
+    parse: NomParser<I::Range, O, E>,
     mut convert_error: impl FnMut(nom::ErrorKind<E>) -> StreamErrorFor<I>,
 ) -> impl Parser<Input = I, Output = O, PartialState = ()>
 where
-    I: FullRangeStream + Clone,
+    I: FullRangeStream,
     I::Range: Range,
 {
-    combine::parser(move |input: &mut I| match parse(input.clone()) {
-        Ok((new_input, output)) => {
-            let consumed = if input.position() == new_input.position() {
-                Consumed::Empty(())
-            } else {
-                Consumed::Consumed(())
-            };
-            *input = new_input;
-            Ok((output, consumed))
+    combine::parser(move |input: &mut I| {
+        let start_range = input.range();
+        let start_range_len = start_range.len();
+        match parse(start_range) {
+            Ok((new_input, output)) => {
+                let consumed_len = start_range_len - new_input.len();
+                let consumed = if consumed_len == 0 {
+                    Consumed::Empty(())
+                } else {
+                    Consumed::Consumed(())
+                };
+                let _ = input.uncons_range(consumed_len);
+                Ok((output, consumed))
+            }
+            Err(err) => Err(match err {
+                nom::Err::Incomplete(_) => {
+                    let len = input.range().len();
+                    let _ = input.uncons_range(len);
+                    Consumed::Consumed(
+                        I::Error::from_error(input.position(), StreamErrorFor::<I>::end_of_input())
+                            .into(),
+                    )
+                }
+                nom::Err::Error(err) => from_nom_context(input, err, &mut convert_error),
+                nom::Err::Failure(err) => Consumed::Consumed(
+                    from_nom_context(input, err, &mut convert_error).into_inner(),
+                ),
+            }),
         }
-        Err(err) => Err(match err {
-            nom::Err::Incomplete(_) => {
-                let len = input.range().len();
-                let _ = input.uncons_range(len);
-                Consumed::Consumed(
-                    I::Error::from_error(input.position(), StreamErrorFor::<I>::end_of_input())
-                        .into(),
-                )
-            }
-            nom::Err::Error(err) => {
-                Consumed::Empty(from_nom_context(input, err, &mut convert_error).into())
-            }
-            nom::Err::Failure(err) => {
-                Consumed::Consumed(from_nom_context(input, err, &mut convert_error).into())
-            }
-        }),
     })
 }
 
@@ -197,7 +221,7 @@ mod tests {
 
     use combine::parser::char::char;
     use combine::parser::range;
-    use combine::RangeStream;
+    use combine::{easy, RangeStream};
 
     // Hex parser from https://github.com/Geal/nom
     #[derive(Debug, PartialEq)]
@@ -304,6 +328,38 @@ mod tests {
     #[test]
     fn test_error() {
         assert!(from_nom(hex_primary).parse("!a").is_err());
+    }
+
+    #[test]
+    fn test_error_position_eof() {
+        let input = "!a";
+        assert_eq!(
+            (char('!'), from_nom(hex_primary))
+                .easy_parse(input)
+                .map_err(|err| err.map_position(|p| p.translate_position(input))),
+            Err(easy::Errors {
+                position: 2,
+                errors: vec![easy::Error::end_of_input()],
+            })
+        );
+    }
+
+    #[test]
+    fn test_error_position() {
+        let input = "!az";
+        assert_eq!(
+            (char('!'), from_nom(hex_primary).expected("hex"))
+                .easy_parse(input)
+                .map_err(|err| err.map_position(|p| p.translate_position(input))),
+            Err(easy::Errors {
+                position: 1,
+                errors: vec![
+                    easy::Error::message_message("TakeWhileMN"),
+                    easy::Error::unexpected_token('a'),
+                    easy::Error::expected_static_message("hex"),
+                ],
+            })
+        );
     }
 }
 
