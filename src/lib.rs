@@ -1,4 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+
+//! Converters between [combine][] and [nom][] parsers.
+//!
+//! [combine]:https://github.com/Marwes/combine
+//! [nom]:https://github.com/Geal/nom
+
 extern crate core;
 
 pub extern crate combine;
@@ -8,70 +14,6 @@ pub extern crate nom;
 use combine::error::{Consumed, ParseError, StreamError, Tracked};
 use combine::stream::{FullRangeStream, Range, StreamErrorFor};
 use combine::{Parser, Stream};
-
-fn position<I>(input: &mut I, range: I::Range) -> I::Position
-where
-    I: FullRangeStream,
-    I::Range: Range,
-{
-    let distance = input.range().len() - range.len();
-    let checkpoint = input.checkpoint();
-    let _ = input.uncons_range(distance);
-    let position = input.position();
-    input.reset(checkpoint);
-    position
-}
-
-fn from_nom_context<I, E>(
-    input: &mut I,
-    context: nom::Context<I::Range, E>,
-    mut convert_error: impl FnMut(nom::ErrorKind<E>) -> StreamErrorFor<I>,
-) -> Consumed<Tracked<I::Error>>
-where
-    I: FullRangeStream,
-    I::Range: Range,
-{
-    let error_position;
-    let error = match context {
-        nom::Context::Code(error_input, err) => {
-            error_position = position(input, error_input);
-            I::Error::from_error(error_position.clone(), convert_error(err))
-        }
-
-        #[cfg(feature = "verbose-errors")]
-        nom::Context::List(nom_errors) => {
-            let mut nom_errors = nom_errors.into_iter();
-            let (error_input, error_kind) = match nom_errors.next() {
-                None => return I::Error::empty(input.position()),
-                Some(nom_error) => nom_error,
-            };
-
-            let mut furthest_error_position = error_input.position();
-            let mut err =
-                I::Error::from_error(furthest_error_position.clone(), convert_error(error_kind));
-
-            for (error_input, error_kind) in nom_errors {
-                use std::cmp::Ordering;
-
-                match error_input.position().cmp(&furthest_error_position) {
-                    Ordering::Less => (),
-                    Ordering::Equal => err.add(convert_error(error_kind)),
-                    Ordering::Greater => {
-                        err =
-                            I::Error::from_error(error_input.position(), convert_error(error_kind));
-                    }
-                }
-            }
-            error_position = furthest_error_position;
-            err
-        }
-    };
-    if error_position == input.position() {
-        Consumed::Empty(error.into())
-    } else {
-        Consumed::Consumed(error.into())
-    }
-}
 
 pub type NomParser<I, O, E> = fn(I) -> Result<(I, O), nom::Err<I, E>>;
 
@@ -212,6 +154,70 @@ where
             input,
             nom::ErrorKind::Custom(convert_error(err.error)),
         ))),
+    }
+}
+
+fn position<I>(input: &mut I, range: I::Range) -> I::Position
+where
+    I: FullRangeStream,
+    I::Range: Range,
+{
+    let distance = input.range().len() - range.len();
+    let checkpoint = input.checkpoint();
+    let _ = input.uncons_range(distance);
+    let position = input.position();
+    input.reset(checkpoint);
+    position
+}
+
+fn from_nom_context<I, E>(
+    input: &mut I,
+    context: nom::Context<I::Range, E>,
+    mut convert_error: impl FnMut(nom::ErrorKind<E>) -> StreamErrorFor<I>,
+) -> Consumed<Tracked<I::Error>>
+where
+    I: FullRangeStream,
+    I::Range: Range,
+{
+    let error_position;
+    let error = match context {
+        nom::Context::Code(error_input, err) => {
+            error_position = position(input, error_input);
+            I::Error::from_error(error_position.clone(), convert_error(err))
+        }
+
+        #[cfg(feature = "verbose-errors")]
+        nom::Context::List(nom_errors) => {
+            let mut nom_errors = nom_errors.into_iter();
+            let (error_input, error_kind) = match nom_errors.next() {
+                None => return I::Error::empty(input.position()),
+                Some(nom_error) => nom_error,
+            };
+
+            let mut furthest_error_position = error_input.position();
+            let mut err =
+                I::Error::from_error(furthest_error_position.clone(), convert_error(error_kind));
+
+            for (error_input, error_kind) in nom_errors {
+                use std::cmp::Ordering;
+
+                match error_input.position().cmp(&furthest_error_position) {
+                    Ordering::Less => (),
+                    Ordering::Equal => err.add(convert_error(error_kind)),
+                    Ordering::Greater => {
+                        err =
+                            I::Error::from_error(error_input.position(), convert_error(error_kind));
+                    }
+                }
+            }
+            error_position = furthest_error_position;
+            err
+        }
+    };
+    if error_position == input.position() {
+        Consumed::Empty(error.into())
+    } else {
+        Consumed::Consumed(error.into())
     }
 }
 

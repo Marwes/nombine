@@ -1,9 +1,12 @@
 # nombine
 
+[![Build Status](https://travis-ci.org/Marwes/nombine.svg?branch=master)](https://travis-ci.org/Marwes/nombine)  [![Docs](https://docs.rs/nombine/badge.svg)](https://docs.rs/nombine) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/Marwes/combine?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
 Converters between [combine][] and [nom][].
 
 [combine]:https://github.com/Marwes/combine
 [nom]:https://github.com/Geal/nom
+
 ```rust
 extern crate combine;
 extern crate nom;
@@ -92,5 +95,4 @@ assert_eq!(
         "",
     ))
 );
-```
 ```
