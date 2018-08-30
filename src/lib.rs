@@ -5,6 +5,7 @@
 //! [combine]:https://github.com/Marwes/combine
 //! [nom]:https://github.com/Geal/nom
 
+#![cfg(feature = "std")]
 extern crate core;
 
 pub extern crate combine;
@@ -229,7 +230,7 @@ mod tests {
 
     use combine::parser::char::char;
     use combine::parser::range;
-    use combine::{easy, RangeStream};
+    use combine::RangeStream;
 
     // Hex parser from https://github.com/Geal/nom
     #[derive(Debug, PartialEq)]
@@ -250,7 +251,7 @@ mod tests {
         }
     }
 
-    named!(hex_primary<&str, u8>,
+    named!(pub hex_primary<&str, u8>,
       map_res!(take_while_m_n!(2, 2, is_hex_digit), from_hex)
     );
 
@@ -346,7 +347,7 @@ mod std_tests {
     use tests::*;
 
     use combine::parser::char::char;
-    use combine::sep_by;
+    use combine::{easy, sep_by};
 
     #[test]
     fn test_from_combine() {
