@@ -1,0 +1,33 @@
+[package]
+name = "nombine"
+version = "0.1.0"
+authors = ["Markus Westerlind <marwes91@gmail.com>"]
+
+description = "Converters between nom and combine parser combinators"
+
+repository = "https://github.com/Marwes/nombine"
+documentation = "https://docs.rs/nombine"
+
+readme = "README.md"
+
+keywords = ["parser", "parsing", "combinators", "ll"]
+
+categories = ["parsing", "no-std"]
+
+license = "MIT"
+
+
+[dependencies]
+nom = { version = "4", default-features = false }
+combine = { version = "3", default-features = false }
+
+little-skeptic = { version = "0.15", optional = true }
+
+[build-dependencies]
+little-skeptic = { version = "0.15", optional = true }
+
+[features]
+verbose-errors = ["nom/verbose-errors"]
+std = ["nom/std", "combine/std"]
+default = ["std"]
+
