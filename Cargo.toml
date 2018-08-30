@@ -1,6 +1,6 @@
 [package]
 name = "nombine"
-version = "0.1.1-alpha.0"
+version = "0.1.0"
 authors = ["Markus Westerlind <marwes91@gmail.com>"]
 
 description = "Converters between nom and combine parser combinators"
@@ -16,12 +16,12 @@ categories = ["parsing", "no-std"]
 
 license = "MIT"
 
-
 [dependencies]
 nom = { version = "4", default-features = false }
 combine = { version = "3", default-features = false }
 
-little-skeptic = { version = "0.15", optional = true }
+[dev-dependencies]
+little-skeptic = "0.15"
 
 [build-dependencies]
 little-skeptic = { version = "0.15", optional = true }
