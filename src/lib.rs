@@ -337,38 +337,6 @@ mod tests {
     fn test_error() {
         assert!(from_nom(hex_primary).parse("!a").is_err());
     }
-
-    #[test]
-    fn test_error_position_eof() {
-        let input = "!a";
-        assert_eq!(
-            (char('!'), from_nom(hex_primary))
-                .easy_parse(input)
-                .map_err(|err| err.map_position(|p| p.translate_position(input))),
-            Err(easy::Errors {
-                position: 2,
-                errors: vec![easy::Error::end_of_input()],
-            })
-        );
-    }
-
-    #[test]
-    fn test_error_position() {
-        let input = "!az";
-        assert_eq!(
-            (char('!'), from_nom(hex_primary).expected("hex"))
-                .easy_parse(input)
-                .map_err(|err| err.map_position(|p| p.translate_position(input))),
-            Err(easy::Errors {
-                position: 1,
-                errors: vec![
-                    easy::Error::message_message("TakeWhileMN"),
-                    easy::Error::unexpected_token('a'),
-                    easy::Error::expected_static_message("hex"),
-                ],
-            })
-        );
-    }
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -399,6 +367,38 @@ mod std_tests {
                     },
                 ],
             ))
+        );
+    }
+
+    #[test]
+    fn test_error_position_eof() {
+        let input = "!a";
+        assert_eq!(
+            (char('!'), from_nom(hex_primary))
+                .easy_parse(input)
+                .map_err(|err| err.map_position(|p| p.translate_position(input))),
+            Err(easy::Errors {
+                position: 2,
+                errors: vec![easy::Error::end_of_input()],
+            })
+        );
+    }
+
+    #[test]
+    fn test_error_position() {
+        let input = "!az";
+        assert_eq!(
+            (char('!'), from_nom(hex_primary).expected("hex"))
+                .easy_parse(input)
+                .map_err(|err| err.map_position(|p| p.translate_position(input))),
+            Err(easy::Errors {
+                position: 1,
+                errors: vec![
+                    easy::Error::message_message("TakeWhileMN"),
+                    easy::Error::unexpected_token('a'),
+                    easy::Error::expected_static_message("hex"),
+                ],
+            })
         );
     }
 }
