@@ -190,23 +190,25 @@ where
         nom::Context::List(nom_errors) => {
             let mut nom_errors = nom_errors.into_iter();
             let (error_input, error_kind) = match nom_errors.next() {
-                None => return I::Error::empty(input.position()),
+                None => return Consumed::Empty(I::Error::empty(input.position()).into()),
                 Some(nom_error) => nom_error,
             };
 
-            let mut furthest_error_position = error_input.position();
+            let mut furthest_error_position = position(input, error_input);
+
             let mut err =
                 I::Error::from_error(furthest_error_position.clone(), convert_error(error_kind));
 
             for (error_input, error_kind) in nom_errors {
                 use std::cmp::Ordering;
 
-                match error_input.position().cmp(&furthest_error_position) {
+                let error_position = position(input, error_input);
+
+                match error_position.cmp(&furthest_error_position) {
                     Ordering::Less => (),
                     Ordering::Equal => err.add(convert_error(error_kind)),
                     Ordering::Greater => {
-                        err =
-                            I::Error::from_error(error_input.position(), convert_error(error_kind));
+                        err = I::Error::from_error(error_position, convert_error(error_kind));
                     }
                 }
             }
