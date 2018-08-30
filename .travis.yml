@@ -8,7 +8,7 @@ rust:
 script:
 - cargo test
 - cargo test --features "verbose-errors little-skeptic"
-- cargo test --features no-default-features
+- cargo test --no-default-features
 env:
   global:
   - secure: Z0JCbroitF6pKdImGLcar9UcXDFUoggvEwYsksoGX16/28iBXLmBX6DDWN1brVdasx/i5M5aEy8xbzcV680+HEbbUgz5uLAMp3xQFzu5FJ276PM9ZFZZgb02EJuYz9THfrC9ajlc+CirYF91i/yMZbpBGajmAzp61puRph/CgI8=
