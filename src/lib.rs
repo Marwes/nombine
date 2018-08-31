@@ -159,6 +159,9 @@ where
     I::Range: Range,
 {
     combine::parser(move |input: &mut I| {
+        // Combine's `<I as StreamOnce>::Range` type is usually `&[u8]` or `&str` which is what nom
+        // expects. By Using `I::Range` instead of `I` directly we get combine's `easy_parse` (and
+        // many other stream wrappers) working and aren't limited to parsing the plain slices
         let start_range = input.range();
         let start_range_len = start_range.len();
         match parse(start_range) {
@@ -169,11 +172,14 @@ where
                 } else {
                     Consumed::Consumed(())
                 };
+                // Move the stream up to where `nom` left off
                 let _ = input.uncons_range(consumed_len);
                 Ok((output, consumed))
             }
             Err(err) => Err(match err {
                 nom::Err::Incomplete(_) => {
+                    // Marking the error as `EOF` + consumed will trigger combine's partial parsing
+                    // to kick in (if it is enabled).
                     let len = input.range().len();
                     let _ = input.uncons_range(len);
                     Consumed::Consumed(
@@ -293,6 +299,9 @@ where
             let mut err =
                 I::Error::from_error(furthest_error_position.clone(), convert_error(error_kind));
 
+            // Perform `combine`s error merging which only keeps the error the furthest into the
+            // stream (this lets `combine` report that it expected one of multiple things at a
+            // single location which is usually what one wants in error messages).
             for (error_input, error_kind) in nom_errors {
                 use std::cmp::Ordering;
 
